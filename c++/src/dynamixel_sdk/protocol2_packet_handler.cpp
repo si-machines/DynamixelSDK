@@ -18,6 +18,7 @@
 
 #if defined(__linux__)
 #include "protocol2_packet_handler.h"
+#include <unistd.h>
 #elif defined(__APPLE__)
 #include "protocol2_packet_handler.h"
 #elif defined(_WIN32) || defined(_WIN64)
@@ -323,7 +324,16 @@ int Protocol2PacketHandler::rxPacket(PortHandler *port, uint8_t *rxpacket)
 
   while(true)
   {
-    rx_length += port->readPort(&rxpacket[rx_length], wait_length - rx_length);
+    const int read_result = port->readPort(&rxpacket[rx_length], wait_length - rx_length);
+    if(read_result < 1) {
+      // No data available. Sleep to give up execution priority and avoid hogging CPU
+      const double secs_per_byte = (1000.0 / (double)port->getBaudRate()) * 10.0;
+      // I don't have a way to test this on other platforms so I'm not going to try and implement anything.
+      usleep(secs_per_byte * 1000.);
+    }
+    // TODO: It looks like readPort returns -1 on an error which makes this a bad idea:
+    rx_length += read_result;
+
     if (rx_length >= wait_length)
     {
       uint16_t idx = 0;
